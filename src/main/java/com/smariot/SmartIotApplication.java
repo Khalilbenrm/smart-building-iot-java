@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
  * Smart Building IoT - Real-Time Event-Driven Backend System.
- * Flow: REST API -> Service -> Kafka Producer -> Kafka Topic -> Kafka Consumer -> MongoDB
+ * Flow: Sensors (MQTT) -> MQTT Subscriber -> Service -> Kafka Producer -> Kafka Topic -> Kafka Consumer -> MongoDB
  */
 @SpringBootApplication
 public class SmartIotApplication {

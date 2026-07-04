@@ -36,6 +36,21 @@ services:
     networks:
       - iot-network
 
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: iot-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/#' -C 1 -i healthcheck-probe -W 3 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - iot-network
+
   mongo:
     image: mongo:7.0
     container_name: iot-mongo
@@ -63,11 +78,14 @@ services:
         condition: service_healthy
       mongo:
         condition: service_healthy
+      mosquitto:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/iot
+      MQTT_BROKER_URL: tcp://mosquitto:1883
     networks:
       - iot-network
 

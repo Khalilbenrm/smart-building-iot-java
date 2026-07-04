@@ -7,9 +7,23 @@ corridors, server rooms, critical HVAC zones).
 ## Architecture
 
 ```
-REST API → Service → Kafka Producer → Kafka Topic (iot-sensor-data) → Kafka Consumer → MongoDB
+Sensors --MQTT--> MQTT Broker (Mosquitto) → MQTT Subscriber → Service → Kafka Producer
+                                                                             ↓
+                                                     Kafka Topic (iot-sensor-data)
+                                                                             ↓
+                                                                 Kafka Consumer → MongoDB
 ```
 
+Sensors publish readings over MQTT (`iot/sensors/{deviceId}/data`, QoS 1) instead of making a
+synchronous HTTP call per reading. This decouples ingestion from sensor availability, scales to
+many concurrent lightweight devices without per-request HTTP overhead, and keeps working (via
+broker-side QoS/queueing) even if the app is briefly unavailable. A `POST /api/sensors/data`
+REST endpoint remains available for manual/one-off ingestion and both paths converge on the same
+`SensorDataService`.
+
+- **MQTT Subscriber** — subscribes to `iot/sensors/+/data`, deserializes the JSON payload, and
+  hands it to the service. Re-subscribes automatically after a reconnect. Disabled under the
+  `simulator` profile so a simulator process doesn't also re-ingest the readings it publishes.
 - **Controller** — pure HTTP mapping, no business logic.
 - **Service** — validates business rules, timestamps readings, delegates to the Kafka producer;
   maps entities back to DTOs for reads.
@@ -27,9 +41,11 @@ REST API → Service → Kafka Producer → Kafka Topic (iot-sensor-data) → Ka
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/sensors/data` | Ingest a reading → published to Kafka, returns 202 |
+| POST | `/api/sensors/data` | Manually ingest a reading → published to Kafka, returns 202 |
 | GET | `/api/sensors/device/{deviceId}` | Historical readings for a device |
 | GET | `/api/sensors/range?start=&end=` | Readings within an ISO-8601 instant range |
+
+Sensor telemetry: MQTT topic `iot/sensors/{deviceId}/data`, JSON payload, QoS 1.
 
 Swagger UI: `http://localhost:8080/swagger-ui.html`
 
@@ -39,9 +55,9 @@ Swagger UI: `http://localhost:8080/swagger-ui.html`
 docker-compose up --build
 ```
 
-Spins up Zookeeper, Kafka, MongoDB and the app (port 8080).
+Spins up Zookeeper, Kafka, MongoDB, a Mosquitto MQTT broker (port 1883) and the app (port 8080).
 
-Local dev without Docker (requires Kafka/Mongo reachable on localhost):
+Local dev without Docker (requires Kafka/Mongo/Mosquitto reachable on localhost):
 
 ```bash
 mvn spring-boot:run -Dspring-boot.run.profiles=local
@@ -49,8 +65,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ###  IoT simulator
 
-Continuously posts randomized readings for 5 zones (with occasional simulated overheating in the
-server room) to the ingestion endpoint:
+Continuously publishes randomized readings for 5 zones (with occasional simulated overheating in
+the server room) over MQTT to the broker configured via `mqtt.broker-url`:
 
 ```bash
 java -jar target/smart-iot-building.jar --spring.profiles.active=simulator
@@ -63,8 +79,8 @@ mvn test
 ```
 
 Covers the service layer (Mockito), Kafka producer/consumer (mocked `KafkaTemplate` /
-`SensorDataRepository`), and REST controller (`@WebMvcTest` + MockMvc), including validation and
-anomaly paths.
+`SensorDataRepository`), the MQTT subscriber (mocked `MqttClient` / `SensorDataService`), and
+REST controller (`@WebMvcTest` + MockMvc), including validation and anomaly paths.
 
 ## Possible improvements
 
