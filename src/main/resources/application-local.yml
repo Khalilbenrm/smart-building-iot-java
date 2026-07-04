@@ -1,0 +1,8 @@
+# Activate with --spring.profiles.active=local when running outside Docker
+# (e.g. `mvn spring-boot:run` against a locally exposed Kafka/Mongo).
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/iot
+  kafka:
+    bootstrap-servers: localhost:9092
