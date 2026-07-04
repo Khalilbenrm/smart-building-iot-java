@@ -47,7 +47,7 @@ Local dev without Docker (requires Kafka/Mongo reachable on localhost):
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-### Bonus: IoT simulator
+###  IoT simulator
 
 Continuously posts randomized readings for 5 zones (with occasional simulated overheating in the
 server room) to the ingestion endpoint:
