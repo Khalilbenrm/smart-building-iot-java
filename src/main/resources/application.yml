@@ -19,13 +19,6 @@ spring:
       acks: all
       retries: 3
 
-mqtt:
-  broker-url: tcp://mosquitto:1883
-  client-id-prefix: iot-app
-  topic-prefix: iot/sensors
-  topic-filter: iot/sensors/+/data
-  qos: 1
-
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

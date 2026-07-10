@@ -1,11 +1,8 @@
 package com.smariot.simulator;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smariot.model.dto.SensorDataDto;
+import com.smariot.service.SensorDataService;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
@@ -19,9 +16,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Bonus: continuously generates realistic sensor readings for a handful of building
- * zones and publishes them over MQTT, the same lightweight publish/subscribe transport
- * real sensors use, instead of blocking on a synchronous HTTP call per reading. Enabled
- * only under the "simulator" profile so it never runs as part of normal application startup.
+ * zones and feeds them straight into SensorDataService, exactly as the REST endpoint
+ * would. Enabled only under the "simulator" profile so it never runs as part of normal
+ * application startup.
  *
  * Usage: java -jar smart-iot-building.jar --spring.profiles.active=simulator
  */
@@ -33,28 +30,19 @@ public class IotSensorSimulator implements CommandLineRunner {
     private static final List<String> DEVICE_IDS = List.of(
             "office-01", "meeting-room-01", "corridor-01", "server-room-01", "hvac-critical-01");
 
-    private final MqttClient mqttClient;
-    private final ObjectMapper objectMapper;
+    private final SensorDataService sensorDataService;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-
-    @Value("${mqtt.topic-prefix}")
-    private String topicPrefix;
-
-    @Value("${mqtt.qos}")
-    private int qos;
 
     @Value("${simulator.interval-seconds:3}")
     private long intervalSeconds;
 
-    public IotSensorSimulator(MqttClient mqttClient, @Qualifier("kafkaObjectMapper") ObjectMapper objectMapper) {
-        this.mqttClient = mqttClient;
-        this.objectMapper = objectMapper;
+    public IotSensorSimulator(SensorDataService sensorDataService) {
+        this.sensorDataService = sensorDataService;
     }
 
     @Override
     public void run(String... args) {
-        log.info("Starting IoT sensor simulator, publishing to MQTT topic '{}/{{deviceId}}/data' every {}s",
-                topicPrefix, intervalSeconds);
+        log.info("Starting IoT sensor simulator, ingesting a random reading every {}s", intervalSeconds);
         scheduler.scheduleAtFixedRate(this::emitRandomReading, 0, intervalSeconds, TimeUnit.SECONDS);
     }
 
@@ -74,14 +62,12 @@ public class IotSensorSimulator implements CommandLineRunner {
                     .humidity(Math.round(humidity * 10.0) / 10.0)
                     .build();
 
-            MqttMessage message = new MqttMessage(objectMapper.writeValueAsBytes(reading));
-            message.setQos(qos);
-            mqttClient.publish(topicPrefix + "/" + deviceId + "/data", message);
+            sensorDataService.ingestSensorData(reading);
 
-            log.info("Simulator published reading for {}: temp={}°C humidity={}%",
+            log.info("Simulator ingested reading for {}: temp={}°C humidity={}%",
                     deviceId, reading.getTemperature(), reading.getHumidity());
         } catch (Exception e) {
-            log.error("Simulator failed to publish reading", e);
+            log.error("Simulator failed to ingest reading", e);
         }
     }
 }
